@@ -72,14 +72,31 @@ describe("Unraid API v4.37.1 catalog", () => {
 
   it("has safety, version, schema-path, and description metadata on every operation", () => {
     const safetyClasses = new Set(["read", "routine", "destructive", "sensitive"]);
+    const annotationKeys = [
+      "readOnlyHint",
+      "destructiveHint",
+      "idempotentHint",
+      "openWorldHint",
+    ] as const;
 
     for (const operation of UNRAID_API_V4_37_1_OPERATIONS) {
       expect(safetyClasses.has(operation.safety), operation.name).toBe(true);
       expect(operation.minApiVersion, operation.name).toBe(UNRAID_API_CATALOG_VERSION);
       expect(operation.schemaPath.length, operation.name).toBeGreaterThan(0);
       expect(operation.description.length, operation.name).toBeGreaterThan(10);
+      for (const key of annotationKeys) {
+        expect(typeof operation.annotations[key], `${operation.name}.${key}`).toBe("boolean");
+      }
+      expect(operation.annotations.openWorldHint, operation.name).toBe(false);
+      expect(operation.annotations.readOnlyHint, operation.name).toBe(operation.kind === "query");
       if (operation.kind === "mutation") {
         expect(operation.requiresConfirmation, operation.name).toBe(operation.safety !== "routine");
+        if (operation.safety === "destructive") {
+          expect(operation.annotations.destructiveHint, operation.name).toBe(true);
+        }
+        if (/(Clear|Delete|Remove|Reset)/.test(operation.name)) {
+          expect(operation.annotations.destructiveHint, operation.name).toBe(true);
+        }
       }
     }
 
@@ -92,6 +109,56 @@ describe("Unraid API v4.37.1 catalog", () => {
       "UnraidV4371QueryRclone",
       "UnraidV4371QueryValidateOidcSession",
     ]);
+  });
+
+  it("keeps API access risk separate from destructive and idempotency semantics", () => {
+    const annotationsFor = (name: string) =>
+      UNRAID_API_V4_37_1_OPERATIONS.find((operation) => operation.name === name)?.annotations;
+
+    expect(annotationsFor("UnraidV4371StartArray")).toMatchObject({
+      destructiveHint: false,
+      idempotentHint: false,
+    });
+    expect(annotationsFor("UnraidV4371ClearArrayDiskStatistics")).toMatchObject({
+      destructiveHint: true,
+      idempotentHint: false,
+    });
+    expect(annotationsFor("UnraidV4371ArchiveNotifications")).toMatchObject({
+      destructiveHint: false,
+      idempotentHint: true,
+    });
+    expect(annotationsFor("UnraidV4371SetTheme")).toMatchObject({
+      destructiveHint: false,
+      idempotentHint: true,
+    });
+    expect(annotationsFor("UnraidV4371CreateNotification")).toMatchObject({
+      destructiveHint: false,
+      idempotentHint: false,
+    });
+    expect(annotationsFor("UnraidV4371DeleteArchivedNotifications")).toMatchObject({
+      destructiveHint: true,
+      idempotentHint: true,
+    });
+    expect(annotationsFor("UnraidV4371PauseParityCheck")).toMatchObject({
+      destructiveHint: false,
+      idempotentHint: false,
+    });
+    expect(annotationsFor("UnraidV4371StopVm")).toMatchObject({
+      destructiveHint: true,
+      idempotentHint: false,
+    });
+    expect(annotationsFor("UnraidV4371UpdateDockerAutostartConfiguration")).toMatchObject({
+      destructiveHint: true,
+      idempotentHint: true,
+    });
+    expect(annotationsFor("UnraidV4371AddApiKeyRole")).toMatchObject({
+      destructiveHint: false,
+      idempotentHint: true,
+    });
+    expect(annotationsFor("UnraidV4371UpdateSshSettings")).toMatchObject({
+      destructiveHint: false,
+      idempotentHint: false,
+    });
   });
 
   it("rejects integers outside GraphQL's signed 32-bit range", () => {

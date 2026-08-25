@@ -1,5 +1,15 @@
 import * as z from "zod/v4";
 
+import {
+  type CompleteToolAnnotations,
+  type MutationToolAnnotations,
+  DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+  IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
+  IDEMPOTENT_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+  NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+  READ_ONLY_TOOL_ANNOTATIONS,
+} from "./tool-annotations.js";
+
 export const UNRAID_API_CATALOG_VERSION = "4.37.1" as const;
 export const UNRAID_API_SCHEMA_URL =
   "https://github.com/unraid/api/blob/v4.37.1/api/generated-schema.graphql" as const;
@@ -14,6 +24,7 @@ export interface UnraidApiOperation {
   readonly document: string;
   readonly inputSchema: z.ZodObject | null;
   readonly safety: UnraidSafetyClass;
+  readonly annotations: CompleteToolAnnotations;
   readonly requiresConfirmation: boolean;
   readonly minApiVersion: typeof UNRAID_API_CATALOG_VERSION;
   readonly description: string;
@@ -335,6 +346,7 @@ function query(
     document,
     inputSchema,
     safety,
+    annotations: READ_ONLY_TOOL_ANNOTATIONS,
     requiresConfirmation,
     description,
   });
@@ -346,8 +358,10 @@ function mutation(
   document: string,
   inputSchema: z.ZodObject | null,
   safety: UnraidSafetyClass,
+  annotations: MutationToolAnnotations,
   description: string,
 ): UnraidApiOperation {
+  // Safety controls server-side gates and confirmation; annotations independently describe effects.
   return defineOperation({
     name,
     kind: "mutation",
@@ -355,6 +369,7 @@ function mutation(
     document,
     inputSchema,
     safety,
+    annotations,
     requiresConfirmation: safety !== "routine",
     description,
   });
@@ -1094,6 +1109,7 @@ const mutationOperations: UnraidApiOperation[] = [
     }`,
     z.object({ input: notificationData }).strict(),
     "routine",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Create a notification record.",
   ),
   mutation(
@@ -1104,6 +1120,7 @@ const mutationOperations: UnraidApiOperation[] = [
     }`,
     z.object({ id, type: notificationType }).strict(),
     "destructive",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Delete one unread or archived notification.",
   ),
   mutation(
@@ -1114,6 +1131,7 @@ const mutationOperations: UnraidApiOperation[] = [
     }`,
     null,
     "destructive",
+    IDEMPOTENT_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Delete every archived notification.",
   ),
   mutation(
@@ -1124,6 +1142,7 @@ const mutationOperations: UnraidApiOperation[] = [
     }`,
     z.object({ id }).strict(),
     "routine",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Archive one notification.",
   ),
   mutation(
@@ -1134,6 +1153,7 @@ const mutationOperations: UnraidApiOperation[] = [
     }`,
     z.object({ ids: z.array(id).min(1) }).strict(),
     "routine",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
     "Archive selected notifications.",
   ),
   mutation(
@@ -1144,6 +1164,7 @@ const mutationOperations: UnraidApiOperation[] = [
     }`,
     z.object({ input: notificationData }).strict(),
     "routine",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
     "Create a notification only when an equivalent unread record does not exist.",
   ),
   mutation(
@@ -1154,6 +1175,7 @@ const mutationOperations: UnraidApiOperation[] = [
     }`,
     z.object({ importance: notificationImportance.optional() }).strict(),
     "routine",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
     "Archive all notifications, optionally restricted by importance.",
   ),
   mutation(
@@ -1164,6 +1186,7 @@ const mutationOperations: UnraidApiOperation[] = [
     }`,
     z.object({ id }).strict(),
     "routine",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Move one archived notification back to unread.",
   ),
   mutation(
@@ -1174,6 +1197,7 @@ const mutationOperations: UnraidApiOperation[] = [
     }`,
     z.object({ ids: z.array(id).min(1) }).strict(),
     "routine",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
     "Move selected archived notifications back to unread.",
   ),
   mutation(
@@ -1184,6 +1208,7 @@ const mutationOperations: UnraidApiOperation[] = [
     }`,
     z.object({ importance: notificationImportance.optional() }).strict(),
     "routine",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
     "Move all archived notifications, optionally restricted by importance, back to unread.",
   ),
   mutation(
@@ -1194,9 +1219,11 @@ const mutationOperations: UnraidApiOperation[] = [
     }`,
     null,
     "routine",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
     "Re-read notifications and recompute cached overview counts.",
   ),
 
+  // Keep lifecycle transitions non-idempotent unless the tagged resolver guarantees retry no-ops.
   mutation(
     "UnraidV4371StartArray",
     "array.setState",
@@ -1214,6 +1241,7 @@ const mutationOperations: UnraidApiOperation[] = [
       decryptionKeyfile: z.string().min(1).optional(),
     }).strict(),
     "sensitive",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Start the array, optionally supplying an encrypted-disk password or keyfile.",
   ),
   mutation(
@@ -1224,6 +1252,7 @@ const mutationOperations: UnraidApiOperation[] = [
     }`,
     null,
     "destructive",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Stop the array, disrupting storage-backed services.",
   ),
   mutation(
@@ -1234,6 +1263,7 @@ const mutationOperations: UnraidApiOperation[] = [
     }`,
     z.object({ input: arrayDiskInput }).strict(),
     "destructive",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Assign a disk to an array slot; incorrect assignment can cause data loss.",
   ),
   mutation(
@@ -1244,6 +1274,7 @@ const mutationOperations: UnraidApiOperation[] = [
     }`,
     z.object({ input: arrayDiskInput }).strict(),
     "destructive",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Remove a disk assignment while the array is stopped.",
   ),
   mutation(
@@ -1254,6 +1285,7 @@ const mutationOperations: UnraidApiOperation[] = [
     }`,
     z.object({ id }).strict(),
     "routine",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Mount one array disk.",
   ),
   mutation(
@@ -1264,6 +1296,7 @@ const mutationOperations: UnraidApiOperation[] = [
     }`,
     z.object({ id }).strict(),
     "destructive",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Unmount one array disk, disrupting access to its filesystem.",
   ),
   mutation(
@@ -1274,20 +1307,59 @@ const mutationOperations: UnraidApiOperation[] = [
     }`,
     z.object({ id }).strict(),
     "routine",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Clear the accumulated I/O statistics for one array disk.",
   ),
 ];
 
+// Duplicate lifecycle requests may repeat work after an ambiguous failure, so only explicit
+// upstream no-op behavior should make one of these operations idempotent.
 const dockerContainerMutations = [
-  ["Start", "start", "routine", "Start a Docker container."],
-  ["Stop", "stop", "routine", "Stop a Docker container."],
-  ["Restart", "restart", "routine", "Restart a Docker container."],
-  ["Pause", "pause", "routine", "Pause a Docker container."],
-  ["Unpause", "unpause", "routine", "Resume a paused Docker container."],
-  ["Update", "updateContainer", "destructive", "Update a Docker container to its latest image."],
+  [
+    "Start",
+    "start",
+    "routine",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+    "Start a Docker container.",
+  ],
+  [
+    "Stop",
+    "stop",
+    "routine",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+    "Stop a Docker container.",
+  ],
+  [
+    "Restart",
+    "restart",
+    "routine",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+    "Restart a Docker container.",
+  ],
+  [
+    "Pause",
+    "pause",
+    "routine",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+    "Pause a Docker container.",
+  ],
+  [
+    "Unpause",
+    "unpause",
+    "routine",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+    "Resume a paused Docker container.",
+  ],
+  [
+    "Update",
+    "updateContainer",
+    "destructive",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+    "Update a Docker container to its latest image.",
+  ],
 ] as const;
 
-for (const [operationWord, field, safety, description] of dockerContainerMutations) {
+for (const [operationWord, field, safety, annotations, description] of dockerContainerMutations) {
   const name = `UnraidV4371${operationWord}DockerContainer`;
   mutationOperations.push(
     mutation(
@@ -1298,6 +1370,7 @@ for (const [operationWord, field, safety, description] of dockerContainerMutatio
       }`,
       z.object({ id }).strict(),
       safety,
+      annotations,
       description,
     ),
   );
@@ -1312,6 +1385,7 @@ mutationOperations.push(
     }`,
     z.object({ id, withImage: z.boolean().optional() }).strict(),
     "destructive",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Remove a Docker container and optionally its image.",
   ),
   mutation(
@@ -1333,6 +1407,7 @@ mutationOperations.push(
       persistUserPreferences: z.boolean().optional(),
     }).strict(),
     "routine",
+    IDEMPOTENT_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Replace Docker autostart ordering, flags, and waits.",
   ),
   mutation(
@@ -1343,6 +1418,7 @@ mutationOperations.push(
     }`,
     z.object({ ids: z.array(id).min(1) }).strict(),
     "destructive",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Update selected Docker containers to their latest images.",
   ),
   mutation(
@@ -1353,21 +1429,65 @@ mutationOperations.push(
     }`,
     null,
     "destructive",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Update every Docker container with an available image update.",
   ),
 );
 
 const vmMutations = [
-  ["Start", "start", "routine", "Start a virtual machine."],
-  ["Stop", "stop", "routine", "Gracefully stop a virtual machine."],
-  ["Pause", "pause", "routine", "Pause a virtual machine."],
-  ["Resume", "resume", "routine", "Resume a paused virtual machine."],
-  ["ForceStop", "forceStop", "destructive", "Force-stop a virtual machine without a graceful shutdown."],
-  ["Reboot", "reboot", "routine", "Reboot a virtual machine."],
-  ["Reset", "reset", "destructive", "Hard-reset a virtual machine."],
+  [
+    "Start",
+    "start",
+    "routine",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+    "Start a virtual machine.",
+  ],
+  [
+    "Stop",
+    "stop",
+    "routine",
+    // The resolver force-destroys the VM if graceful shutdown times out.
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+    "Request a graceful VM stop; the API force-stops it if graceful shutdown times out.",
+  ],
+  [
+    "Pause",
+    "pause",
+    "routine",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+    "Pause a virtual machine.",
+  ],
+  [
+    "Resume",
+    "resume",
+    "routine",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+    "Resume a paused virtual machine.",
+  ],
+  [
+    "ForceStop",
+    "forceStop",
+    "destructive",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+    "Force-stop a virtual machine without a graceful shutdown.",
+  ],
+  [
+    "Reboot",
+    "reboot",
+    "routine",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+    "Reboot a virtual machine.",
+  ],
+  [
+    "Reset",
+    "reset",
+    "destructive",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+    "Hard-reset a virtual machine.",
+  ],
 ] as const;
 
-for (const [operationWord, field, safety, description] of vmMutations) {
+for (const [operationWord, field, safety, annotations, description] of vmMutations) {
   const name = `UnraidV4371${operationWord}Vm`;
   mutationOperations.push(
     mutation(
@@ -1376,6 +1496,7 @@ for (const [operationWord, field, safety, description] of vmMutations) {
       `mutation ${name}($id: PrefixedID!) { vm { ${field}(id: $id) } }`,
       z.object({ id }).strict(),
       safety,
+      annotations,
       description,
     ),
   );
@@ -1398,7 +1519,8 @@ mutationOperations.push(
       }).strict(),
     }).strict(),
     "sensitive",
-    "Create an API key and return its generated key material once under the sensitive-operation gate.",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+    "Create an API key and return its generated key material once under the sensitive-operation gate. When overwrite is true, an existing key with the requested name may be replaced.",
   ),
   mutation(
     "UnraidV4371AddApiKeyRole",
@@ -1408,6 +1530,7 @@ mutationOperations.push(
     }`,
     z.object({ input: z.object({ apiKeyId: id, role }).strict() }).strict(),
     "sensitive",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
     "Grant a role to an API key.",
   ),
   mutation(
@@ -1418,6 +1541,7 @@ mutationOperations.push(
     }`,
     z.object({ input: z.object({ apiKeyId: id, role }).strict() }).strict(),
     "sensitive",
+    IDEMPOTENT_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Remove a role from an API key.",
   ),
   mutation(
@@ -1428,6 +1552,7 @@ mutationOperations.push(
     }`,
     z.object({ input: z.object({ ids: z.array(id).min(1) }).strict() }).strict(),
     "sensitive",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Revoke and delete selected API keys.",
   ),
   mutation(
@@ -1446,6 +1571,7 @@ mutationOperations.push(
       }).strict(),
     }).strict(),
     "sensitive",
+    IDEMPOTENT_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Update API key metadata and grants without returning key material.",
   ),
   mutation(
@@ -1456,6 +1582,7 @@ mutationOperations.push(
     }`,
     z.object({ theme: themeName }).strict(),
     "routine",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
     "Set the WebGUI theme.",
   ),
   mutation(
@@ -1466,6 +1593,7 @@ mutationOperations.push(
     }`,
     z.object({ locale: z.string().min(1) }).strict(),
     "routine",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
     "Set the display locale.",
   ),
   mutation(
@@ -1476,6 +1604,7 @@ mutationOperations.push(
     }`,
     null,
     "routine",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Start a non-correcting WIP parity check.",
   ),
   mutation(
@@ -1486,6 +1615,7 @@ mutationOperations.push(
     }`,
     null,
     "destructive",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Start a correcting WIP parity check that can write parity data.",
   ),
   mutation(
@@ -1494,6 +1624,7 @@ mutationOperations.push(
     "mutation UnraidV4371PauseParityCheck { parityCheck { pause } }",
     null,
     "routine",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Pause the active parity check.",
   ),
   mutation(
@@ -1502,6 +1633,7 @@ mutationOperations.push(
     "mutation UnraidV4371ResumeParityCheck { parityCheck { resume } }",
     null,
     "routine",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Resume the paused parity check.",
   ),
   mutation(
@@ -1510,6 +1642,7 @@ mutationOperations.push(
     "mutation UnraidV4371CancelParityCheck { parityCheck { cancel } }",
     null,
     "destructive",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Cancel the active parity check before completion.",
   ),
   mutation(
@@ -1522,6 +1655,8 @@ mutationOperations.push(
       input: z.object({ name: z.string().min(1), type: z.string().min(1), parameters: json }).strict(),
     }).strict(),
     "sensitive",
+    // Collision and retry behavior depends on the installed Rclone runtime.
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Create an rclone remote from provider-defined JSON parameters; omit its resulting configuration.",
   ),
   mutation(
@@ -1532,21 +1667,64 @@ mutationOperations.push(
     }`,
     z.object({ input: z.object({ name: z.string().min(1) }).strict() }).strict(),
     "destructive",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Delete an rclone remote configuration.",
   ),
 );
 
 const onboardingNoInputMutations = [
-  ["CompleteOnboarding", "completeOnboarding", "routine", "Mark onboarding complete."],
-  ["ResetOnboarding", "resetOnboarding", "destructive", "Reset persisted onboarding progress for testing."],
-  ["OpenOnboarding", "openOnboarding", "routine", "Force the onboarding modal open."],
-  ["CloseOnboarding", "closeOnboarding", "routine", "Close the onboarding modal."],
-  ["BypassOnboarding", "bypassOnboarding", "sensitive", "Temporarily bypass onboarding in API memory."],
-  ["ResumeOnboarding", "resumeOnboarding", "routine", "Clear the temporary onboarding bypass."],
-  ["ClearOnboardingOverride", "clearOnboardingOverride", "routine", "Clear testing overrides and reload onboarding state from disk."],
+  [
+    "CompleteOnboarding",
+    "completeOnboarding",
+    "routine",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
+    "Mark onboarding complete.",
+  ],
+  [
+    "ResetOnboarding",
+    "resetOnboarding",
+    "destructive",
+    IDEMPOTENT_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+    "Reset persisted onboarding progress for testing.",
+  ],
+  [
+    "OpenOnboarding",
+    "openOnboarding",
+    "routine",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
+    "Force the onboarding modal open.",
+  ],
+  [
+    "CloseOnboarding",
+    "closeOnboarding",
+    "routine",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
+    "Close the onboarding modal.",
+  ],
+  [
+    "BypassOnboarding",
+    "bypassOnboarding",
+    "sensitive",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
+    "Temporarily bypass onboarding in API memory.",
+  ],
+  [
+    "ResumeOnboarding",
+    "resumeOnboarding",
+    "routine",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
+    "Clear the temporary onboarding bypass.",
+  ],
+  [
+    "ClearOnboardingOverride",
+    "clearOnboardingOverride",
+    "routine",
+    IDEMPOTENT_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+    "Clear testing overrides and reload onboarding state from disk.",
+  ],
 ] as const;
 
-for (const [operationWord, field, safety, description] of onboardingNoInputMutations) {
+for (const [operationWord, field, safety, annotations, description] of onboardingNoInputMutations) {
   const name = `UnraidV4371${operationWord}`;
   mutationOperations.push(
     mutation(
@@ -1555,6 +1733,7 @@ for (const [operationWord, field, safety, description] of onboardingNoInputMutat
       `mutation ${name} { onboarding { ${field} { ${ONBOARDING_SAFE_FIELDS} } } }`,
       null,
       safety,
+      annotations,
       description,
     ),
   );
@@ -1569,6 +1748,7 @@ mutationOperations.push(
     }`,
     z.object({ input: onboardingOverrideInput }).strict(),
     "sensitive",
+    IDEMPOTENT_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Set in-memory onboarding, activation, partner, or registration overrides for testing.",
   ),
   mutation(
@@ -1587,6 +1767,7 @@ mutationOperations.push(
       }).strict(),
     }).strict(),
     "destructive",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Create and configure an internal boot pool, optionally updating BIOS and rebooting.",
   ),
   mutation(
@@ -1597,6 +1778,7 @@ mutationOperations.push(
     }`,
     null,
     "routine",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
     "Refresh the internal-boot context from current emhttp state.",
   ),
   mutation(
@@ -1607,6 +1789,8 @@ mutationOperations.push(
     }`,
     z.object({ input: pluginInstallInput }).strict(),
     "sensitive",
+    // Installing executable or provider-supplied code can replace files and run opaque hooks.
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Install executable Unraid plugin code from a URL and return its tracked operation.",
   ),
   mutation(
@@ -1617,6 +1801,7 @@ mutationOperations.push(
     }`,
     z.object({ input: pluginInstallInput }).strict(),
     "sensitive",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Install an Unraid language pack from a URL and return its tracked operation.",
   ),
 );
@@ -1628,6 +1813,7 @@ const organizerMutations: readonly [
   invocation: string,
   inputSchema: z.ZodObject | null,
   safety: UnraidSafetyClass,
+  annotations: MutationToolAnnotations,
   description: string,
 ][] = [
   [
@@ -1641,6 +1827,7 @@ const organizerMutations: readonly [
       childrenIds: z.array(z.string()).optional(),
     }).strict(),
     "routine",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
     "Create a Docker organizer folder.",
   ],
   [
@@ -1650,6 +1837,7 @@ const organizerMutations: readonly [
     "(folderId: $folderId, childrenIds: $childrenIds)",
     z.object({ folderId: z.string().optional(), childrenIds: z.array(z.string()) }).strict(),
     "routine",
+    IDEMPOTENT_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Replace a Docker organizer folder's children.",
   ],
   [
@@ -1659,6 +1847,7 @@ const organizerMutations: readonly [
     "(entryIds: $entryIds)",
     z.object({ entryIds: z.array(z.string()).min(1) }).strict(),
     "destructive",
+    IDEMPOTENT_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Delete Docker organizer entries.",
   ],
   [
@@ -1671,6 +1860,7 @@ const organizerMutations: readonly [
       destinationFolderId: z.string().min(1),
     }).strict(),
     "routine",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
     "Move Docker organizer entries into a folder.",
   ],
   [
@@ -1684,6 +1874,7 @@ const organizerMutations: readonly [
       position: z.number(),
     }).strict(),
     "routine",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
     "Move Docker organizer entries to a position in a folder.",
   ],
   [
@@ -1693,6 +1884,7 @@ const organizerMutations: readonly [
     "(folderId: $folderId, newName: $newName)",
     z.object({ folderId: z.string().min(1), newName: z.string().min(1) }).strict(),
     "routine",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
     "Rename a Docker organizer folder.",
   ],
   [
@@ -1707,6 +1899,7 @@ const organizerMutations: readonly [
       position: z.number().optional(),
     }).strict(),
     "routine",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
     "Create a Docker organizer folder and move selected entries into it.",
   ],
   [
@@ -1716,11 +1909,22 @@ const organizerMutations: readonly [
     "(viewId: $viewId, prefs: $prefs)",
     z.object({ viewId: z.string().optional(), prefs: json }).strict(),
     "sensitive",
+    // The provider-defined payload replaces existing preferences, but exact retries are no-ops.
+    IDEMPOTENT_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Update provider-defined Docker organizer view preferences.",
   ],
 ];
 
-for (const [name, field, declaration, invocation, inputSchema, safety, description] of organizerMutations) {
+for (const [
+  name,
+  field,
+  declaration,
+  invocation,
+  inputSchema,
+  safety,
+  annotations,
+  description,
+] of organizerMutations) {
   mutationOperations.push(
     mutation(
       name,
@@ -1728,6 +1932,7 @@ for (const [name, field, declaration, invocation, inputSchema, safety, descripti
       `mutation ${name}${declaration} { ${field}${invocation} { ${ORGANIZER_SAFE_FIELDS} } }`,
       inputSchema,
       safety,
+      annotations,
       description,
     ),
   );
@@ -1799,6 +2004,7 @@ mutationOperations.push(
       sysModel: z.string().optional(),
     }).strict(),
     "sensitive",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
     "Update server name, comment, and model; omit the server API key from the response.",
   ),
   mutation(
@@ -1811,6 +2017,7 @@ mutationOperations.push(
       input: z.object({ enabled: z.boolean(), port: int.min(1).max(65_535) }).strict(),
     }).strict(),
     "sensitive",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Enable or disable SSH and set its listening port.",
   ),
   mutation(
@@ -1821,6 +2028,7 @@ mutationOperations.push(
     }`,
     null,
     "routine",
+    IDEMPOTENT_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Synchronize Docker container-to-template path mappings.",
   ),
   mutation(
@@ -1829,6 +2037,7 @@ mutationOperations.push(
     "mutation UnraidV4371ResetDockerTemplateMappings { resetDockerTemplateMappings }",
     null,
     "destructive",
+    IDEMPOTENT_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Reset Docker template mappings to defaults.",
   ),
   mutation(
@@ -1837,6 +2046,7 @@ mutationOperations.push(
     "mutation UnraidV4371RefreshDockerDigests { refreshDockerDigests }",
     null,
     "routine",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Refresh Docker image digests and update availability.",
   ),
   mutation(
@@ -1854,6 +2064,7 @@ mutationOperations.push(
       }).strict(),
     }).strict(),
     "sensitive",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Start a flash backup using schema-defined paths and optional rclone JSON options.",
   ),
   mutation(
@@ -1864,6 +2075,8 @@ mutationOperations.push(
     }`,
     z.object({ input: json }).strict(),
     "sensitive",
+    // Opaque settings JSON may replace values or trigger side effects this MCP cannot infer.
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Apply unified JSON settings while omitting potentially secret-bearing values from the response.",
   ),
   mutation(
@@ -1874,6 +2087,7 @@ mutationOperations.push(
     }`,
     z.object({ input: temperatureConfigInput }).strict(),
     "routine",
+    IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
     "Update temperature polling, sensors, thresholds, and history retention.",
   ),
   mutation(
@@ -1891,6 +2105,7 @@ mutationOperations.push(
       }).strict(),
     }).strict(),
     "sensitive",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Update timezone, NTP servers, synchronization mode, or manual system time.",
   ),
   mutation(
@@ -1899,6 +2114,7 @@ mutationOperations.push(
     "mutation UnraidV4371ConfigureUps($config: UPSConfigInput!) { configureUps(config: $config) }",
     z.object({ config: upsConfigInput }).strict(),
     "sensitive",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Configure UPS connectivity and automatic-shutdown thresholds.",
   ),
   mutation(
@@ -1913,6 +2129,8 @@ mutationOperations.push(
       }).strict(),
     }).strict(),
     "sensitive",
+    // Executable plugin installation may replace code and optionally restart the API.
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Add executable API plugins and optionally restart the API.",
   ),
   mutation(
@@ -1927,6 +2145,7 @@ mutationOperations.push(
       }).strict(),
     }).strict(),
     "destructive",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Remove API plugins and optionally restart the API.",
   ),
   mutation(
@@ -1943,6 +2162,7 @@ mutationOperations.push(
       }).strict(),
     }).strict(),
     "sensitive",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Update Unraid Connect WAN exposure and forwarding settings.",
   ),
   mutation(
@@ -1965,6 +2185,7 @@ mutationOperations.push(
       }).strict(),
     }).strict(),
     "sensitive",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Sign in to Unraid Connect using an API key and optional profile metadata.",
   ),
   mutation(
@@ -1973,6 +2194,7 @@ mutationOperations.push(
     "mutation UnraidV4371ConnectSignOut { connectSignOut }",
     null,
     "sensitive",
+    DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Sign out of Unraid Connect.",
   ),
   mutation(
@@ -1989,6 +2211,7 @@ mutationOperations.push(
       }).strict(),
     }).strict(),
     "sensitive",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Configure public remote access and port forwarding.",
   ),
   mutation(
@@ -2009,6 +2232,7 @@ mutationOperations.push(
       }).strict(),
     }).strict(),
     "sensitive",
+    NON_DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     "Enable or disable dynamic remote access for a fixed access URL.",
   ),
 );

@@ -19,20 +19,14 @@ import {
   type UnraidReadFacade,
   VersionAwareUnraidReadFacade,
 } from "./read-facade.js";
+import {
+  DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
+  IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
+  READ_ONLY_TOOL_ANNOTATIONS,
+} from "./tool-annotations.js";
 import { UnraidApiError, UnraidClient } from "./unraid-client.js";
 
-const readAnnotations = {
-  readOnlyHint: true,
-  destructiveHint: false,
-  idempotentHint: true,
-} as const;
-
-const mutationAnnotations = {
-  readOnlyHint: false,
-  destructiveHint: true,
-  idempotentHint: false,
-} as const;
-
+const emptyInputSchema = z.object({}).strict();
 const idSchema = z.string().min(1).max(512).describe("Prefixed ID returned by the Unraid API");
 
 function success(data: Record<string, unknown>) {
@@ -69,9 +63,10 @@ function registerReadTools(server: McpServer, client: UnraidReadFacade): void {
       title: "Get Unraid system information",
       description:
         "Get Unraid/API versions, host OS, hardware summary, memory modules, and network interfaces.",
-      annotations: readAnnotations,
+      inputSchema: emptyInputSchema,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
     },
-    (context) => runTool(() => client.getSystemInfo(context.mcpReq.signal)),
+    (_input, context) => runTool(() => client.getSystemInfo(context.mcpReq.signal)),
   );
 
   server.registerTool(
@@ -80,9 +75,10 @@ function registerReadTools(server: McpServer, client: UnraidReadFacade): void {
       title: "Get Unraid live metrics",
       description:
         "Get current CPU, memory, network, swap, and temperature metrics from Unraid.",
-      annotations: readAnnotations,
+      inputSchema: emptyInputSchema,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
     },
-    (context) => runTool(() => client.getMetrics(context.mcpReq.signal)),
+    (_input, context) => runTool(() => client.getMetrics(context.mcpReq.signal)),
   );
 
   server.registerTool(
@@ -91,9 +87,10 @@ function registerReadTools(server: McpServer, client: UnraidReadFacade): void {
       title: "Get Unraid array status",
       description:
         "Get array state, capacity, parity status, and boot, parity, data, and cache disks.",
-      annotations: readAnnotations,
+      inputSchema: emptyInputSchema,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
     },
-    (context) => runTool(() => client.getArray(context.mcpReq.signal)),
+    (_input, context) => runTool(() => client.getArray(context.mcpReq.signal)),
   );
 
   server.registerTool(
@@ -102,9 +99,10 @@ function registerReadTools(server: McpServer, client: UnraidReadFacade): void {
       title: "List Unraid physical disks",
       description:
         "List detected and assignable physical disks with identity, SMART summary, temperature, and partitions.",
-      annotations: readAnnotations,
+      inputSchema: emptyInputSchema,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
     },
-    (context) => runTool(() => client.listDisks(context.mcpReq.signal)),
+    (_input, context) => runTool(() => client.listDisks(context.mcpReq.signal)),
   );
 
   server.registerTool(
@@ -112,9 +110,10 @@ function registerReadTools(server: McpServer, client: UnraidReadFacade): void {
     {
       title: "List Unraid shares",
       description: "List user shares, capacity, allocation, cache, disk inclusion, and LUKS status.",
-      annotations: readAnnotations,
+      inputSchema: emptyInputSchema,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
     },
-    (context) => runTool(() => client.listShares(context.mcpReq.signal)),
+    (_input, context) => runTool(() => client.listShares(context.mcpReq.signal)),
   );
 
   server.registerTool(
@@ -123,9 +122,10 @@ function registerReadTools(server: McpServer, client: UnraidReadFacade): void {
       title: "List Unraid Docker containers",
       description:
         "List Docker container state, image, ports, autostart, resource sizes, and port conflicts.",
-      annotations: readAnnotations,
+      inputSchema: emptyInputSchema,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
     },
-    (context) => runTool(() => client.listDockerContainers(context.mcpReq.signal)),
+    (_input, context) => runTool(() => client.listDockerContainers(context.mcpReq.signal)),
   );
 
   server.registerTool(
@@ -134,16 +134,18 @@ function registerReadTools(server: McpServer, client: UnraidReadFacade): void {
       title: "Get Docker container logs",
       description:
         "Get timestamped logs for one Unraid Docker container. Use the returned cursor as since for the next page.",
-      inputSchema: z.object({
-        id: idSchema.describe("Container ID returned by unraid_list_docker_containers"),
-        tail: z.number().int().min(1).max(2_000).default(200).describe("Maximum recent lines"),
-        since: z
-          .string()
-          .datetime({ offset: true })
-          .optional()
-          .describe("Optional DateTime cursor returned by an earlier log request"),
-      }),
-      annotations: readAnnotations,
+      inputSchema: z
+        .object({
+          id: idSchema.describe("Container ID returned by unraid_list_docker_containers"),
+          tail: z.number().int().min(1).max(2_000).default(200).describe("Maximum recent lines"),
+          since: z
+            .string()
+            .datetime({ offset: true })
+            .optional()
+            .describe("Optional DateTime cursor returned by an earlier log request"),
+        })
+        .strict(),
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
     },
     ({ id, tail, since }, context) =>
       runTool(() =>
@@ -156,9 +158,10 @@ function registerReadTools(server: McpServer, client: UnraidReadFacade): void {
     {
       title: "List Unraid virtual machines",
       description: "List Unraid VM IDs, names, and lifecycle states.",
-      annotations: readAnnotations,
+      inputSchema: emptyInputSchema,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
     },
-    (context) => runTool(() => client.listVms(context.mcpReq.signal)),
+    (_input, context) => runTool(() => client.listVms(context.mcpReq.signal)),
   );
 
   server.registerTool(
@@ -167,9 +170,10 @@ function registerReadTools(server: McpServer, client: UnraidReadFacade): void {
       title: "Get Unraid UPS status",
       description:
         "Get connected UPS status, battery, load, voltage, runtime, power, and UPS configuration.",
-      annotations: readAnnotations,
+      inputSchema: emptyInputSchema,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
     },
-    (context) => runTool(() => client.getUps(context.mcpReq.signal)),
+    (_input, context) => runTool(() => client.getUps(context.mcpReq.signal)),
   );
 
   server.registerTool(
@@ -178,13 +182,15 @@ function registerReadTools(server: McpServer, client: UnraidReadFacade): void {
       title: "List Unraid notifications",
       description:
         "List unread or archived Unraid notifications and include overview counts and active warnings/alerts.",
-      inputSchema: z.object({
-        type: z.enum(["UNREAD", "ARCHIVE"]).default("UNREAD"),
-        importance: z.enum(["INFO", "WARNING", "ALERT"]).optional(),
-        offset: z.number().int().min(0).default(0),
-        limit: z.number().int().min(1).max(200).default(50),
-      }),
-      annotations: readAnnotations,
+      inputSchema: z
+        .object({
+          type: z.enum(["UNREAD", "ARCHIVE"]).default("UNREAD"),
+          importance: z.enum(["INFO", "WARNING", "ALERT"]).optional(),
+          offset: z.number().int().min(0).default(0),
+          limit: z.number().int().min(1).max(200).default(50),
+        })
+        .strict(),
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
     },
     ({ type, importance, offset, limit }, context) =>
       runTool(() =>
@@ -199,9 +205,10 @@ function registerReadTools(server: McpServer, client: UnraidReadFacade): void {
     {
       title: "List Unraid system logs",
       description: "List system log files available through the Unraid API.",
-      annotations: readAnnotations,
+      inputSchema: emptyInputSchema,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
     },
-    (context) => runTool(() => client.listSystemLogs(context.mcpReq.signal)),
+    (_input, context) => runTool(() => client.listSystemLogs(context.mcpReq.signal)),
   );
 
   server.registerTool(
@@ -210,12 +217,14 @@ function registerReadTools(server: McpServer, client: UnraidReadFacade): void {
       title: "Read an Unraid system log",
       description:
         "Read a bounded section of a system log. First obtain its API-provided path with unraid_list_system_logs.",
-      inputSchema: z.object({
-        path: z.string().min(1).max(1_024).describe("Exact path returned by unraid_list_system_logs"),
-        lines: z.number().int().min(1).max(5_000).default(200),
-        startLine: z.number().int().min(0).optional(),
-      }),
-      annotations: readAnnotations,
+      inputSchema: z
+        .object({
+          path: z.string().min(1).max(1_024).describe("Exact path returned by unraid_list_system_logs"),
+          lines: z.number().int().min(1).max(5_000).default(200),
+          startLine: z.number().int().min(0).optional(),
+        })
+        .strict(),
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
     },
     ({ path, lines, startLine }, context) =>
       runTool(() =>
@@ -234,11 +243,14 @@ function registerMutationTools(
     {
       title: "Start or stop the Unraid array",
       description: "Set the Unraid array state. Stopping the array interrupts storage services.",
-      inputSchema: z.object({
-        action: z.enum(["START", "STOP"]),
-        confirmation: z.literal("STOP_ARRAY").optional(),
-      }),
-      annotations: mutationAnnotations,
+      inputSchema: z
+        .object({
+          action: z.enum(["START", "STOP"]),
+          confirmation: z.literal("STOP_ARRAY").optional(),
+        })
+        .strict(),
+      // Tool annotations cover the destructive STOP branch, not only the safer START branch.
+      annotations: DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     },
     ({ action, confirmation }, context) => {
       if (
@@ -271,17 +283,20 @@ function registerMutationTools(
       title: "Control an Unraid parity check",
       description:
         "Start, pause, resume, or cancel a parity check. START with correct=true writes parity corrections and requires destructive mutations to be enabled.",
-      inputSchema: z.object({
-        action: z.enum(["START", "PAUSE", "RESUME", "CANCEL"]),
-        correct: z
-          .boolean()
-          .default(false)
-          .describe("For START only: write corrections when parity errors are found"),
-        confirmation: z
-          .enum(["WRITE_PARITY_CORRECTIONS", "CANCEL_PARITY_CHECK"])
-          .optional(),
-      }),
-      annotations: mutationAnnotations,
+      inputSchema: z
+        .object({
+          action: z.enum(["START", "PAUSE", "RESUME", "CANCEL"]),
+          correct: z
+            .boolean()
+            .default(false)
+            .describe("For START only: write corrections when parity errors are found"),
+          confirmation: z
+            .enum(["WRITE_PARITY_CORRECTIONS", "CANCEL_PARITY_CHECK"])
+            .optional(),
+        })
+        .strict(),
+      // Correcting START and CANCEL make this mixed-action tool destructive and non-idempotent.
+      annotations: DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     },
     ({ action, correct, confirmation }, context) => {
       if (
@@ -324,13 +339,17 @@ function registerMutationTools(
     "unraid_control_docker_container",
     {
       title: "Control an Unraid Docker container",
-      description: "Start, stop, pause, unpause, or update one existing Docker container.",
-      inputSchema: z.object({
-        id: idSchema.describe("Container ID returned by unraid_list_docker_containers"),
-        action: z.enum(["START", "STOP", "PAUSE", "UNPAUSE", "UPDATE"]),
-        confirmation: z.literal("UPDATE_DOCKER_CONTAINER").optional(),
-      }),
-      annotations: mutationAnnotations,
+      description:
+        "Start, stop, pause, unpause, or update one existing Docker container. UPDATE replaces executable image content and requires the destructive gate and explicit confirmation.",
+      inputSchema: z
+        .object({
+          id: idSchema.describe("Container ID returned by unraid_list_docker_containers"),
+          action: z.enum(["START", "STOP", "PAUSE", "UNPAUSE", "UPDATE"]),
+          confirmation: z.literal("UPDATE_DOCKER_CONTAINER").optional(),
+        })
+        .strict(),
+      // UPDATE replaces executable image content, so the combined tool uses conservative hints.
+      annotations: DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     },
     ({ id, action, confirmation }, context) => {
       if (
@@ -357,12 +376,16 @@ function registerMutationTools(
     "unraid_control_vm",
     {
       title: "Control an Unraid virtual machine",
-      description: "Start, stop, pause, resume, or reboot one existing Unraid VM.",
-      inputSchema: z.object({
-        id: idSchema.describe("VM ID returned by unraid_list_vms"),
-        action: z.enum(["START", "STOP", "PAUSE", "RESUME", "REBOOT"]),
-      }),
-      annotations: mutationAnnotations,
+      description:
+        "Start, stop, pause, resume, or reboot one existing Unraid VM. STOP can fall back to a forced shutdown if graceful shutdown times out, risking unsaved guest data.",
+      inputSchema: z
+        .object({
+          id: idSchema.describe("VM ID returned by unraid_list_vms"),
+          action: z.enum(["START", "STOP", "PAUSE", "RESUME", "REBOOT"]),
+        })
+        .strict(),
+      // STOP may fall back to forced destruction, and REBOOT is not idempotent.
+      annotations: DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     },
     ({ id, action }, context) =>
       runTool(() =>
@@ -375,15 +398,14 @@ function registerMutationTools(
     {
       title: "Archive or unarchive Unraid notifications",
       description: "Archive or unarchive one or more Unraid notifications by ID.",
-      inputSchema: z.object({
-        ids: z.array(idSchema).min(1).max(100),
-        action: z.enum(["ARCHIVE", "UNARCHIVE"]),
-      }),
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: true,
-      },
+      inputSchema: z
+        .object({
+          ids: z.array(idSchema).min(1).max(100),
+          action: z.enum(["ARCHIVE", "UNARCHIVE"]),
+        })
+        .strict(),
+      // Batch retries ignore notifications already moved to the requested state.
+      annotations: IDEMPOTENT_MUTATION_TOOL_ANNOTATIONS,
     },
     ({ ids, action }, context) =>
       runTool(() =>
@@ -399,12 +421,14 @@ function registerDestructiveTools(server: McpServer, client: GraphQLExecutor): v
       title: "Remove an Unraid Docker container",
       description:
         "Permanently remove a Docker container and optionally its image. This does not remove appdata.",
-      inputSchema: z.object({
-        id: idSchema.describe("Container ID returned by unraid_list_docker_containers"),
-        withImage: z.boolean().default(false),
-        confirmation: z.literal("REMOVE_DOCKER_CONTAINER"),
-      }),
-      annotations: mutationAnnotations,
+      inputSchema: z
+        .object({
+          id: idSchema.describe("Container ID returned by unraid_list_docker_containers"),
+          withImage: z.boolean().default(false),
+          confirmation: z.literal("REMOVE_DOCKER_CONTAINER"),
+        })
+        .strict(),
+      annotations: DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     },
     ({ id, withImage }, context) =>
       runTool(() =>
@@ -422,12 +446,14 @@ function registerDestructiveTools(server: McpServer, client: GraphQLExecutor): v
       title: "Force stop or reset an Unraid VM",
       description:
         "Force stop or reset an existing VM without a graceful guest shutdown. Unsaved guest data can be lost.",
-      inputSchema: z.object({
-        id: idSchema.describe("VM ID returned by unraid_list_vms"),
-        action: z.enum(["FORCE_STOP", "RESET"]),
-        confirmation: z.literal("FORCE_VM_ACTION"),
-      }),
-      annotations: mutationAnnotations,
+      inputSchema: z
+        .object({
+          id: idSchema.describe("VM ID returned by unraid_list_vms"),
+          action: z.enum(["FORCE_STOP", "RESET"]),
+          confirmation: z.literal("FORCE_VM_ACTION"),
+        })
+        .strict(),
+      annotations: DESTRUCTIVE_MUTATION_TOOL_ANNOTATIONS,
     },
     ({ id, action }, context) =>
       runTool(() =>
@@ -442,7 +468,7 @@ export function createServer(
 ): McpServer {
   const server = new McpServer({
     name: "unraid-mcp",
-    version: "1.0.0",
+    version: "1.0.1",
   });
   const readFacade = new VersionAwareUnraidReadFacade(client);
 

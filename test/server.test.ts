@@ -98,6 +98,75 @@ describe("createServer", () => {
     expect(names).not.toContain("unraid_remove_docker_container");
   });
 
+  it("advertises complete annotations and strict input schemas for every enabled tool", async () => {
+    const root = mappedRoot();
+    const { client } = await connect(
+      config({
+        allowMutations: true,
+        allowDestructiveMutations: true,
+        files: {
+          roots: [root],
+          writableRoots: [root.name],
+          allowWrites: true,
+          maxFileBytes: 1024,
+          maxDirectoryEntries: 20,
+        },
+      }),
+    );
+    const { tools } = await client.listTools();
+    const annotationKeys = [
+      "readOnlyHint",
+      "destructiveHint",
+      "idempotentHint",
+      "openWorldHint",
+    ] as const;
+
+    expect(tools).toHaveLength(
+      19 +
+        UNRAID_API_V4_37_1_OPERATIONS.length +
+        UNRAID_API_V4_37_1_SUBSCRIPTIONS.length +
+        4,
+    );
+    for (const tool of tools) {
+      expect(tool.inputSchema, tool.name).toMatchObject({
+        type: "object",
+        properties: expect.any(Object),
+        additionalProperties: false,
+      });
+      expect(tool.annotations, tool.name).toBeDefined();
+      for (const key of annotationKeys) {
+        expect(typeof tool.annotations?.[key], `${tool.name}.${key}`).toBe("boolean");
+      }
+      expect(tool.annotations?.openWorldHint, tool.name).toBe(false);
+    }
+
+    const byName = new Map(tools.map((tool) => [tool.name, tool]));
+    for (const name of [
+      "unraid_list_mapped_file_roots",
+      "unraid_list_mapped_files",
+      "unraid_read_mapped_file",
+    ]) {
+      expect(byName.get(name)?.annotations, name).toMatchObject({
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+      });
+    }
+    expect(byName.get("unraid_manage_notifications")?.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    });
+    for (const name of [
+      "unraid_remove_docker_container",
+      "unraid_force_vm",
+      "unraid_control_vm",
+      "unraid_overwrite_mapped_file",
+    ]) {
+      expect(byName.get(name)?.annotations?.destructiveHint, name).toBe(true);
+    }
+  });
+
   it("calls a read operation and returns structured content", async () => {
     const execute = vi.fn(async (query: string) => {
       if (query === API_CAPABILITIES_QUERY) {
@@ -338,11 +407,22 @@ describe("createServer", () => {
       expect(readOnlyTools.has(name), name).toBe(availableByDefault);
       expect(routineTools.has(name), name).toBe(availableWithRoutine);
       expect(allTools.has(name), name).toBe(true);
+      expect(allTools.get(name)?.annotations, name).toEqual(operation.annotations);
       if (operation.requiresConfirmation) {
         expect(allTools.get(name)?.inputSchema, name).toMatchObject({
           required: expect.arrayContaining(["confirmation"]),
         });
       }
+    }
+
+    for (const subscription of UNRAID_API_V4_37_1_SUBSCRIPTIONS) {
+      const name = apiV4SubscriptionToolName(subscription.field);
+      expect(allTools.get(name)?.annotations, name).toEqual({
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      });
     }
   });
 

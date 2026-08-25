@@ -14,22 +14,8 @@ import {
   type GraphQLExecutor,
   type UnraidReadFacade,
 } from "./read-facade.js";
+import { READ_ONLY_TOOL_ANNOTATIONS } from "./tool-annotations.js";
 import { UnraidApiError } from "./unraid-client.js";
-
-const readAnnotations = {
-  readOnlyHint: true,
-  destructiveHint: false,
-  idempotentHint: true,
-} as const;
-
-function operationAnnotations(operation: UnraidApiOperation) {
-  if (operation.kind === "query") return readAnnotations;
-  return {
-    readOnlyHint: false,
-    destructiveHint: operation.safety !== "routine",
-    idempotentHint: false,
-  } as const;
-}
 
 export function apiV4ToolName(operation: UnraidApiOperation): string {
   const suffix = operation.name
@@ -132,7 +118,7 @@ export function registerApiV4Tools(
         title: `Unraid API ${operation.schemaPath}`,
         description,
         inputSchema,
-        annotations: operationAnnotations(operation),
+        annotations: operation.annotations,
         _meta: {
           unraidApiVersion: operation.minApiVersion,
           unraidSchemaPath: operation.schemaPath,
@@ -179,7 +165,7 @@ export function registerApiV4Tools(
         description:
           "Wait for the next event from this fixed GraphQL subscription, return one bounded payload, then disconnect.",
         inputSchema,
-        annotations: readAnnotations,
+        annotations: READ_ONLY_TOOL_ANNOTATIONS,
         _meta: {
           unraidApiVersion: subscription.minApiVersion,
           unraidSubscriptionField: subscription.field,

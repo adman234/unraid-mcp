@@ -236,6 +236,19 @@ describe("HTTP transport", () => {
         ).length +
         UNRAID_API_V4_37_1_SUBSCRIPTIONS.length,
     );
+    for (const tool of tools.tools) {
+      expect(tool.inputSchema, tool.name).toMatchObject({
+        type: "object",
+        properties: expect.any(Object),
+        additionalProperties: false,
+      });
+      expect(tool.annotations, tool.name).toEqual({
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      });
+    }
     expect(result.structuredContent).toEqual({ info: { os: { hostname: "tower" } } });
   });
 });
