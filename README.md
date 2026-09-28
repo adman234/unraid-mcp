@@ -203,6 +203,51 @@ The HTTP listener is intentionally plain HTTP. The example does not publish its 
 
 The built-in authentication throttle identifies the immediate TCP peer. Behind a reverse proxy, configure authentication rate limiting at the proxy as well because all proxied clients may share one peer address. Do not forward an untrusted `Host` value; either preserve the external hostname and include it in `MCP_ALLOWED_HOSTS`, or rewrite it to a fixed allowlisted hostname.
 
+### Unraid Docker template
+
+[`unraid/unraid-mcp.xml`](unraid/unraid-mcp.xml) is a Docker Manager template that runs the always-on HTTP container from the Unraid **Docker** tab. Install it from an Unraid terminal:
+
+```bash
+wget -qO /boot/config/plugins/dockerMan/templates-user/my-unraid-mcp.xml \
+  https://raw.githubusercontent.com/adman234/unraid-mcp/main/unraid/unraid-mcp.xml
+```
+
+Then open **Docker > Add Container**, choose **unraid-mcp** from the **Template** list, fill in the required fields, and click **Apply**. Generate the MCP auth token with `openssl rand -hex 32`, and list in **Allowed hosts** every IP or hostname clients will use, such as `192.168.1.10,tower`.
+
+The template publishes port 3000 on the LAN in bridge mode and runs the image as `nobody:users` (`99:100`, the owner of Unraid share files) with a read-only root filesystem, no capabilities, and `no-new-privileges`. Keep the port on the LAN or a VPN; the endpoint is plain HTTP and must not be forwarded to the internet.
+
+Access is controlled in layers, all from the container's edit page:
+
+- **Unraid API key role**: the upper bound for every Unraid tool. Use `VIEWER` for read-only access.
+- **Allow mutations** and **Allow destructive mutations**: register management and destructive tools. Both are off by default.
+- **Mapped folders**: the only host directories the file tools can see. Each **Path** entry is read-only by default. The template ships one alias, `shared`, mapped to `/mnt/user/appdata/unraid-mcp/shared`; change its host path to the folder you want to expose. To add another folder, use **Add another Path** with a container path under `/mnt/files/` and add it to **File roots**, for example `{"shared":"/mnt/files/shared","docs":"/mnt/files/docs"}`. Leave **File roots** empty to disable file tools.
+- **Allow file writes** and **Writable folders**: permit overwriting existing files in the listed aliases only. The folder's Path must also be set to read/write, and the files must be writable by `99:100`.
+
+Claude Desktop connects through the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) proxy. Add this to `claude_desktop_config.json`, replacing the address and token:
+
+```json
+{
+  "mcpServers": {
+    "unraid": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://192.168.1.10:3000/mcp",
+        "--allow-http",
+        "--header",
+        "Authorization:${UNRAID_MCP_AUTH}"
+      ],
+      "env": {
+        "UNRAID_MCP_AUTH": "Bearer your-mcp-auth-token"
+      }
+    }
+  }
+}
+```
+
+`--allow-http` is needed because the container serves plain HTTP; the address must be on your LAN or VPN and listed in **Allowed hosts**.
+
 ### Local Docker client configuration
 
 An OpenCode configuration that launches the image through a Docker daemon is:

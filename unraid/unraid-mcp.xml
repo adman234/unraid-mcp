@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>unraid-mcp</Name>
+  <Repository>lemanjo/unraid-mcp:1.0.1</Repository>
+  <Registry>https://hub.docker.com/r/lemanjo/unraid-mcp</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/adman234/unraid-mcp/issues</Support>
+  <Project>https://github.com/adman234/unraid-mcp</Project>
+  <Overview>Model Context Protocol (MCP) server that lets AI clients such as Claude Desktop inspect and manage this Unraid server through the official Unraid GraphQL API, and read (optionally overwrite) files in folders you explicitly map into the container.[br][br]Read-only by default: mutation tools, destructive tools, and file writes each have their own switch and are all off until you enable them. Access is further limited by the role of the Unraid API key you supply and by which folders you map (read-only or read/write).[br][br]Clients connect to http://[IP]:[PORT:3000]/mcp with the MCP auth token as a bearer token. The endpoint is plain HTTP: keep it on your LAN or VPN (for example Tailscale) and never forward the port to the internet.</Overview>
+  <Category>Tools:Utilities</Category>
+  <WebUI/>
+  <TemplateURL>https://raw.githubusercontent.com/adman234/unraid-mcp/main/unraid/unraid-mcp.xml</TemplateURL>
+  <Icon/>
+  <ExtraParams>--user 99:100 --read-only --cap-drop=ALL --security-opt=no-new-privileges</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>An Unraid API key (Settings &gt; Management Access &gt; API Keys; start with the VIEWER role) and Unraid 7.2 or later.</Requires>
+  <Config Name="MCP port" Target="3000" Default="3000" Mode="tcp" Description="Host port for the MCP endpoint. Clients connect to http://SERVER-IP:PORT/mcp. Do not forward this port to the internet." Type="Port" Display="always" Required="true" Mask="false">3000</Config>
+  <Config Name="Unraid URL" Target="UNRAID_URL" Default="" Mode="" Description="Unraid WebGUI address as seen from the container, e.g. http://192.168.1.10 or https://192.168.1.10. /graphql is added automatically. Redirects are rejected, so use the final URL (if SSL is set to Strict, use your https://...myunraid.net address)." Type="Variable" Display="always" Required="true" Mask="false"/>
+  <Config Name="Unraid API key" Target="UNRAID_API_KEY" Default="" Mode="" Description="API key created under Settings &gt; Management Access &gt; API Keys. Its role caps what the MCP can do: VIEWER is read-only; for mutations grant only the resources you need (ARRAY, DOCKER, VMS, NOTIFICATIONS) instead of ADMIN." Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="MCP auth token" Target="MCP_AUTH_TOKEN" Default="" Mode="" Description="Bearer token AI clients must send (at least 32 characters). Generate one in the Unraid terminal with: openssl rand -hex 32" Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="Allowed hosts" Target="MCP_ALLOWED_HOSTS" Default="" Mode="" Description="Comma-separated hostnames/IPs clients use to reach this container, without ports, e.g. 192.168.1.10,tower,tower.local,100.64.0.5. Requests with any other Host header are rejected." Type="Variable" Display="always" Required="true" Mask="false"/>
+  <Config Name="Allow mutations" Target="UNRAID_ALLOW_MUTATIONS" Default="false" Mode="" Description="true registers routine management tools (start/stop containers and VMs, parity checks, notifications, and similar). The API key must also permit them." Type="Variable" Display="always" Required="false" Mask="false">false</Config>
+  <Config Name="Allow destructive mutations" Target="UNRAID_ALLOW_DESTRUCTIVE_MUTATIONS" Default="false" Mode="" Description="true also registers destructive, credential, and security tools (removing containers, forced VM actions, API key changes). Requires Allow mutations = true. Each call still needs an explicit confirmation." Type="Variable" Display="always" Required="false" Mask="false">false</Config>
+  <Config Name="Mapped folder: shared" Target="/mnt/files/shared" Default="/mnt/user/appdata/unraid-mcp/shared" Mode="ro" Description="Host folder exposed to the MCP under the alias 'shared'. Point it at the narrowest folder you need, e.g. /mnt/user/documents. Access mode read-only unless the alias is listed in Writable folders. To add more folders, use 'Add another Path' with a container path under /mnt/files/ and add it to File roots." Type="Path" Display="always" Required="false" Mask="false">/mnt/user/appdata/unraid-mcp/shared</Config>
+  <Config Name="File roots" Target="MCP_FILE_ROOTS" Default="{&quot;shared&quot;:&quot;/mnt/files/shared&quot;}" Mode="" Description="JSON map of alias to container path for every mapped folder the MCP may use, e.g. {&quot;shared&quot;:&quot;/mnt/files/shared&quot;,&quot;docs&quot;:&quot;/mnt/files/docs&quot;}. Aliases: lowercase letters, digits, - or _. Each path must be mapped above. Leave empty to disable file tools." Type="Variable" Display="always" Required="false" Mask="false">{"shared":"/mnt/files/shared"}</Config>
+  <Config Name="Allow file writes" Target="MCP_ALLOW_FILE_WRITES" Default="false" Mode="" Description="true lets the MCP overwrite existing files in the aliases listed in Writable folders. It cannot create, delete, or rename files. The folder mapping must also be read/write." Type="Variable" Display="always" Required="false" Mask="false">false</Config>
+  <Config Name="Writable folders" Target="MCP_WRITABLE_FILE_ROOTS" Default="" Mode="" Description="Comma-separated aliases from File roots that may be overwritten, e.g. shared. Must be empty when Allow file writes is false." Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="Skip Unraid TLS verification" Target="UNRAID_TLS_SKIP_VERIFY" Default="false" Mode="" Description="true accepts Unraid's self-signed certificate on an https:// Unraid URL. Last resort; prefer the myunraid.net URL or a CA certificate." Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+  <Config Name="Transport" Target="MCP_TRANSPORT" Default="http" Mode="" Description="Must be http for an always-on container." Type="Variable" Display="advanced-hide" Required="true" Mask="false">http</Config>
+  <Config Name="Listen address" Target="MCP_HOST" Default="0.0.0.0" Mode="" Description="Address inside the container to listen on." Type="Variable" Display="advanced-hide" Required="true" Mask="false">0.0.0.0</Config>
+  <Config Name="Max file size (bytes)" Target="MCP_MAX_FILE_BYTES" Default="262144" Mode="" Description="Largest file the MCP will read or write, 1024 to 1048576." Type="Variable" Display="advanced" Required="false" Mask="false">262144</Config>
+  <Config Name="Max directory entries" Target="MCP_MAX_DIRECTORY_ENTRIES" Default="500" Mode="" Description="Maximum entries returned per directory listing, 1 to 5000." Type="Variable" Display="advanced" Required="false" Mask="false">500</Config>
+</Container>
